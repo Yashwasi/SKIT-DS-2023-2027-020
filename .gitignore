@@ -16,3 +16,7 @@ weekly_reports/
 test_csv.py
 test_csv_rowcount_backup.py
 check_duplicates_backup.py
+
+# Local DuckDB databases
+*.duckdb
+*.wal
