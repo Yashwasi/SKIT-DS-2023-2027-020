@@ -52,35 +52,34 @@ SKIT-DS-2023-2027-020
 
 # 
 
-# \## Dataset
+# \
+## Dataset
 
-# 
+The project uses raindrop measurement data containing the following fields:
 
-# The project uses raindrop measurement data containing fields such as:
+- `DateTime`
+- `Diameter_mm`
+- `Velocity_m_s`
+- `Volume_mm3`
+- `Condition`
+- `SourceFile`
 
-# 
+The original master dataset contains 13,830,190 rows from 17 source files.
 
-# \- `DateTime`
+### Data Cleaning
 
-# \- `Diameter\_mm`
+Exact duplicate rows were identified by comparing all six columns.
 
-# \- `Velocity\_m\_s`
+- Original rows: 13,830,190
+- Exact duplicate occurrences removed: 1,368,866
+- Rows after deduplication: 12,461,324
+- Remaining exact duplicate rows: 0
 
-# \- `Volume\_mm3`
+The cleaned dataset is saved locally as:
 
-# \- `Condition`
+`data/raindrop_volume_deduplicated.csv`
 
-# \- `SourceFile`
-
-# 
-
-# The master dataset contains approximately 13.83 million rows from 17 source files.
-
-# 
-
-# The dataset is not stored in this GitHub repository because of its large size. Obtain the dataset from the project team and update the file path in the scripts according to your local setup.
-
-# 
+The original dataset is preserved. Large dataset files are not stored in this GitHub repository. Obtain the dataset from the project team and update local file paths in scripts if necessary.
 
 # \## Project Structure
 
