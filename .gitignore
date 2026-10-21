@@ -8,3 +8,7 @@ data/*.csv
 data/*.zip
 models/*.pkl
 models/*.joblib
+data/**/*.csv
+
+# Generated reports
+weekly_reports/
