@@ -1,0 +1,38 @@
+name: Weekly Contribution Report
+
+"on":
+  schedule:
+    - cron: "29 18 * * 4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install report dependency
+        run: python -m pip install reportlab
+
+      - name: Generate weekly PDF
+        run: python generate_report.py weekly
+
+      - name: Upload PDF report
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-contribution-report
+          path: weekly_reports/weekly_report_*.pdf
+          if-no-files-found: error
+          retention-days: 90
