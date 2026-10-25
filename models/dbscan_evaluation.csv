@@ -1,0 +1,4 @@
+eps,min_samples,Clusters_excluding_noise,Noise_count,Noise_percentage,Silhouette_excluding_noise
+0.3,10,2,77,0.513,0.8602156721772767
+0.4,10,2,53,0.353,0.8595028735900467
+0.5,10,2,43,0.287,0.86034511684799

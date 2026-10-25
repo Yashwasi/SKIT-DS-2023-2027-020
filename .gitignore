@@ -20,3 +20,8 @@ check_duplicates_backup.py
 # Local DuckDB databases
 *.duckdb
 *.wal
+*.sqlite
+*.sqlite3
+*.db
+*-wal
+*-shm
