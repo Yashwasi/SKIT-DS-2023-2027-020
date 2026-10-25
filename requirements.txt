@@ -1,7 +1,33 @@
+# Core data science
 pandas
 numpy
-matplotlib
+polars
+
+# Machine learning
 scikit-learn
 xgboost
+
+# Deep learning
+torch
+torchvision
+
+# Visualization
+matplotlib
+plotly
+
+# Notebook
 jupyter
+
+# Reporting
 reportlab
+
+# Database / DuckDB
+duckdb
+
+# FastAPI backend
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.0.0
+
+# Utilities
+python-dotenv
