@@ -1,0 +1,8 @@
+Algorithm,Parameters,Clusters,Noise_Percent,Silhouette_Score,Davies_Bouldin_Index,Inertia,Smallest_Cluster,Largest_Cluster
+DBSCAN,"eps=0.1, min_samples=10",8,4.36,0.09759972544697043,0.5640491082206847,,8,18994
+DBSCAN,"eps=0.15, min_samples=10",6,2.7449999999999997,0.2886339797212285,0.4010987683693458,,7,19389
+DBSCAN,"eps=0.2, min_samples=10",3,1.805,0.6116057704742044,0.6562783199956969,,13,19590
+DBSCAN,"eps=0.25, min_samples=10",1,1.3299999999999998,,,,19734,19734
+DBSCAN,"eps=0.3, min_samples=10",1,1.145,,,,19771,19771
+DBSCAN,"eps=0.4, min_samples=10",1,0.885,,,,19823,19823
+DBSCAN,"eps=0.5, min_samples=10",2,0.62,0.7024945157816551,0.29086166653125567,,15,19861
