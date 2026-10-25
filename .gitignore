@@ -25,3 +25,27 @@ check_duplicates_backup.py
 *.db
 *-wal
 *-shm
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Large datasets - do not upload to GitHub
+raindrop_volume_processed/*.csv
+data/*.csv
+Data/*.csv
+
+# Model artifacts
+*.pkl
+*.joblib
+*.pt
+*.pth
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.log
