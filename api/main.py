@@ -30,19 +30,32 @@ import math
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-import numpy as np
-import pandas as pd
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, model_validator
 
-# ── Optional ML dependencies ──────────────────────────────────────────────
+# ── Optional data / ML dependencies (lazy so server starts without them) ──
+try:
+    import numpy as np
+    _HAS_NUMPY = True
+except ImportError:
+    np = None  # type: ignore[assignment]
+    _HAS_NUMPY = False
+
+try:
+    import pandas as pd
+    _HAS_PANDAS = True
+except ImportError:
+    pd = None  # type: ignore[assignment]
+    _HAS_PANDAS = False
+
 try:
     import xgboost as xgb
     _HAS_XGB = True
 except ImportError:
+    xgb = None  # type: ignore[assignment]
     _HAS_XGB = False
 
 try:
@@ -50,7 +63,16 @@ try:
     import torch.nn as nn
     _HAS_TORCH = True
 except ImportError:
+    torch = None  # type: ignore[assignment]
+    nn = None  # type: ignore[assignment]
     _HAS_TORCH = False
+
+if TYPE_CHECKING:
+    import numpy as np  # noqa: F811
+    import pandas as pd  # noqa: F811
+    import torch  # noqa: F811
+    import torch.nn as nn  # noqa: F811
+    import xgboost as xgb  # noqa: F811
 
 # ---------------------------------------------------------------------------
 # PATHS
@@ -85,7 +107,9 @@ STARTUP_TIME = time.time()
 # PYTORCH MODEL DEFINITION
 # ---------------------------------------------------------------------------
 
-class RaindropNet(nn.Module if _HAS_TORCH else object):  # type: ignore[misc]
+_NetBase: Any = nn.Module if _HAS_TORCH else object
+
+class RaindropNet(_NetBase):  # type: ignore[misc,valid-type]
     """Fully-connected regression network (must match train_models.py)."""
 
     def __init__(self, input_dim: int, hidden_dims: list[int]) -> None:
@@ -134,7 +158,12 @@ def _load_nn():
 @lru_cache(maxsize=1)
 def _load_scaler():
     """Fit a StandardScaler on a small sample — only used for the NN."""
-    from sklearn.preprocessing import StandardScaler
+    if not _HAS_NUMPY or not _HAS_PANDAS:
+        return None
+    try:
+        from sklearn.preprocessing import StandardScaler
+    except ImportError:
+        return None
 
     data_path = next(
         (p for p in DATA_CANDIDATES if p.exists()), None
@@ -152,6 +181,8 @@ def _load_scaler():
 
 @lru_cache(maxsize=1)
 def _dataset_stats() -> dict:
+    if not _HAS_PANDAS:
+        return {}
     data_path = next((p for p in DATA_CANDIDATES if p.exists()), None)
     if data_path is None:
         return {}
@@ -188,6 +219,8 @@ def _spherical_volume(diameter_mm: float) -> float:
 
 
 def _predict_xgb(diameter: float, velocity: float) -> Optional[float]:
+    if not _HAS_NUMPY:
+        return None
     model = _load_xgb()
     if model is None:
         return None
@@ -196,6 +229,8 @@ def _predict_xgb(diameter: float, velocity: float) -> Optional[float]:
 
 
 def _predict_nn(diameter: float, velocity: float) -> Optional[float]:
+    if not _HAS_NUMPY or not _HAS_TORCH:
+        return None
     net = _load_nn()
     scaler = _load_scaler()
     if net is None or scaler is None:

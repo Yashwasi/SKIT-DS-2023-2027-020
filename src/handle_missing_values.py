@@ -25,7 +25,6 @@ Run from the repository root:
 from pathlib import Path
 import math
 
-import numpy as np
 import pandas as pd
 
 
@@ -109,7 +108,6 @@ def main() -> None:
     # ------------------------------------------------------------------
     physical_cols = ["Diameter_mm", "Velocity_m_s", "Volume_mm3"]
 
-    rows_before_drop = len(df)
     # Cast to numeric, coerce errors → NaN
     for col in physical_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -238,7 +236,7 @@ def main() -> None:
     add("## 4. Volume Formula Corrections")
     add()
     add(
-        f"- Formula: `Volume_mm3 = (π / 6) × Diameter_mm³`"
+        "- Formula: `Volume_mm3 = (π / 6) × Diameter_mm³`"
     )
     add(
         f"- Tolerance: `{VOLUME_TOLERANCE}` mm³"
@@ -258,7 +256,7 @@ def main() -> None:
 
     add("## 6. Row Count Summary")
     add()
-    add(f"| | Rows |")
+    add("| | Rows |")
     add("|---|---:|")
     add(f"| Initial rows | {total_initial:,} |")
     add(f"| Rows removed (invalid) | {n_invalid:,} |")
