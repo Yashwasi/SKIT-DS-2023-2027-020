@@ -1,0 +1,3 @@
+Feature,Q1,Q3,IQR,Lower_Bound,Upper_Bound,Outlier_Count,Outlier_Percentage
+Diameter_mm,0.624,0.815,0.191,0.3375,1.1015,984,4.92
+Velocity_m_s,1.53,2.849,1.319,-0.4485,4.8275,287,1.435

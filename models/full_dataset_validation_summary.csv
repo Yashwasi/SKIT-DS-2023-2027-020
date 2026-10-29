@@ -1,0 +1,12 @@
+Check,Result
+Total rows scanned,13830190.0
+Invalid measurement rows,0.0
+Volume formula mismatches (> 0.001 mm3),0.0
+Maximum formula difference (mm3),5.684341886080802e-14
+Exact duplicate rows within chunks,1368391.0
+Minimum diameter (mm),0.52
+Maximum diameter (mm),9.689
+Minimum velocity (m/s),1.0
+Maximum velocity (m/s),11.999
+Minimum volume (mm3),0.0736221766393256
+Maximum volume (mm3),476.2505497780956

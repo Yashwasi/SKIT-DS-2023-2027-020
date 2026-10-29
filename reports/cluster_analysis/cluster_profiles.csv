@@ -1,0 +1,4 @@
+Cluster,Count,Diameter_Mean,Diameter_Median,Diameter_Min,Diameter_Max,Velocity_Mean,Velocity_Median,Velocity_Min,Velocity_Max,Percentage
+0,13935,0.7151,0.687,0.521,2.626,1.7329,1.708,1.0,2.725,69.675
+1,5993,0.8216,0.765,0.52,2.483,3.5319,3.422,1.718,10.223,29.965
+2,72,4.5526,4.7545,2.676,6.016,2.6892,2.59,1.292,8.581,0.36
