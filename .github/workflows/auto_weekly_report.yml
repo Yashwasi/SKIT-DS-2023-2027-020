@@ -32,7 +32,7 @@ jobs:
       - name: Archive report
         run: |
           mkdir -p weekly_reports
-          mv *_Weekly_Progress_Report_Form-3_*.pdf weekly_reports/
+          ls -lah weekly_reports/
 
       - name: Commit and push report
         run: |
