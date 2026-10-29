@@ -2,6 +2,7 @@
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -32,26 +33,52 @@ def git_output(*args):
 
 
 def generate_report(period="weekly"):
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+
     if period == "weekly":
-        since = now - timedelta(days=7)
+        # Reporting period: Friday 00:00 through next Friday 00:00 (exclusive).
+        days_since_friday = (now.weekday() - 4) % 7
+
+        period_start = (
+            now - timedelta(days=days_since_friday)
+        ).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # On Friday, report the previous completed Friday-Thursday period.
+        if now.weekday() == 4:
+            period_start -= timedelta(days=7)
+
+        period_end = period_start + timedelta(days=7)
+
+        since = period_start
+        until = period_end
+
     elif period == "monthly":
         since = now - timedelta(days=30)
+        until = now
+
     elif period == "final":
         since = None
+        until = None
+
     else:
         raise ValueError("Use weekly, monthly, or final")
-
     command = [
-        "log", "--all",
+        "log", "main",
         "--date=short",
         "--pretty=format:%ad|%an|%h|%s",
     ]
     if since:
-        command.insert(1, f"--since={since.strftime('%Y-%m-%d %H:%M:%S')}")
+        command.insert(
+            1, f"--since={since.isoformat()}"
+        )
 
+    if until:
+        command.insert(
+            1, f"--before={until.isoformat()}"
+        )
     output = git_output(*command)
     commits = [line.split("|", 3) for line in output.splitlines() if line]
+
 
     REPORT_DIR.mkdir(exist_ok=True)
     filename = REPORT_DIR / f"{period}_report_{now:%Y%m%d_%H%M%S}.pdf"
@@ -76,7 +103,7 @@ def generate_report(period="weekly"):
         ])
 
     if len(rows) == 1:
-        rows.append(["—", "No commits", "—", "No commits found in this period"])
+        rows.append(["-", "No commits", "-", "No commits found in this period"])
 
     table = Table(
         rows,
