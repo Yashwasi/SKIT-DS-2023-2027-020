@@ -1,4 +1,4 @@
-﻿import subprocess
+import subprocess
 import sys
 import io
 import html
@@ -43,7 +43,7 @@ def reporting_window(period, now):
         if days_since_friday <= 1:
             start_day -= timedelta(days=7)
         end_day = start_day + timedelta(days=7)
-        return start_day, end_day, f"{start_day:%d %b %Y} â€“ {(end_day - timedelta(days=1)):%d %b %Y}"
+        return start_day, end_day, f"{start_day:%d %b %Y} - {(end_day - timedelta(days=1)):%d %b %Y}"
     if period == "monthly":
         start_day = today - timedelta(days=30)
         return start_day, today + timedelta(days=1), f"Last 30 days from {start_day:%d %b %Y}"
@@ -112,18 +112,19 @@ def get_git_metrics(period, start_day, end_day):
 
 
 def create_charts(students, timeline):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 3.2))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 2.0))
     authors = list(students)
     periods = list(timeline)
     if periods and authors:
         for author in authors:
             ax1.plot(periods, [timeline[p].get(author, 0) for p in periods],
                      marker="o", linewidth=1.5, label=author)
-        ax1.set_title("Commit Timeline")
-        ax1.set_ylabel("Commits")
-        ax1.tick_params(axis="x", rotation=35, labelsize=7)
+        ax1.set_title("Commit Timeline", fontsize=8)
+        ax1.set_ylabel("Commits", fontsize=7)
+        ax1.tick_params(axis="x", rotation=30, labelsize=6)
+        ax1.tick_params(axis="y", labelsize=6)
         ax1.grid(True, linestyle="--", alpha=0.4)
-        ax1.legend(fontsize=6)
+        ax1.legend(fontsize=5.5)
     else:
         ax1.text(0.5, 0.5, "No commits in this period", ha="center", va="center")
         ax1.set_axis_off()
@@ -131,9 +132,10 @@ def create_charts(students, timeline):
     if authors:
         net = [students[a]["added"] - students[a]["deleted"] for a in authors]
         ax2.bar(authors, net)
-        ax2.set_title("Net Lines Changed")
-        ax2.set_ylabel("Added âˆ’ Deleted")
-        ax2.tick_params(axis="x", rotation=35, labelsize=7)
+        ax2.set_title("Net Lines Changed", fontsize=8)
+        ax2.set_ylabel("Added - Deleted", fontsize=7)
+        ax2.tick_params(axis="x", rotation=30, labelsize=6)
+        ax2.tick_params(axis="y", labelsize=6)
         ax2.grid(axis="y", linestyle="--", alpha=0.4)
     else:
         ax2.text(0.5, 0.5, "No code changes recorded", ha="center", va="center")
@@ -143,7 +145,7 @@ def create_charts(students, timeline):
     fig.savefig(buf, format="png", dpi=160, bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
-    return Image(buf, width=510, height=150)
+    return Image(buf, width=520, height=95)
 
 
 def generate_report(period="weekly"):
@@ -156,18 +158,18 @@ def generate_report(period="weekly"):
     output = REPORT_DIR / f"weekly_report_{stamp}.pdf" if period == "weekly" else REPORT_DIR / f"{period}_report_{stamp}.pdf"
 
     doc = SimpleDocTemplate(str(output), pagesize=letter,
-                            rightMargin=30, leftMargin=30, topMargin=24, bottomMargin=24)
+                            rightMargin=24, leftMargin=24, topMargin=16, bottomMargin=16)
     styles = getSampleStyleSheet()
-    college_style = ParagraphStyle("College", parent=styles["Heading1"], fontSize=12,
-                                   leading=15, alignment=1, spaceAfter=2)
-    dept_style = ParagraphStyle("Dept", parent=styles["Normal"], fontSize=8.5,
-                                alignment=1, spaceAfter=4)
-    title_style = ParagraphStyle("FormTitle", parent=styles["Heading2"], fontSize=12,
-                                 alignment=1, spaceAfter=5)
-    section_style = ParagraphStyle("Section", parent=styles["Heading2"], fontSize=9.5,
-                                   leading=12, spaceBefore=5, spaceAfter=3)
-    small = ParagraphStyle("Small", parent=styles["Normal"], fontSize=7, leading=8.5)
-    cell = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=7.5, leading=9)
+    college_style = ParagraphStyle("College", parent=styles["Heading1"], fontSize=11,
+                                   leading=13, alignment=1, spaceAfter=1)
+    dept_style = ParagraphStyle("Dept", parent=styles["Normal"], fontSize=8,
+                                alignment=1, spaceAfter=2)
+    title_style = ParagraphStyle("FormTitle", parent=styles["Heading2"], fontSize=11,
+                                 alignment=1, spaceAfter=3)
+    section_style = ParagraphStyle("Section", parent=styles["Heading2"], fontSize=8.5,
+                                   leading=10, spaceBefore=3, spaceAfter=2)
+    small = ParagraphStyle("Small", parent=styles["Normal"], fontSize=6.5, leading=8)
+    cell = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=6.5, leading=8)
 
     story = [
         Paragraph(f"<b>{html.escape(COLLEGE_NAME)}</b>", college_style),
@@ -175,7 +177,7 @@ def generate_report(period="weekly"):
         Paragraph(f"<u><b>{'Weekly Progress Report (Form-3)' if period == 'weekly' else period.title() + ' Project Report'}</b></u>", title_style),
         Paragraph(f"<b>Repository:</b> {html.escape(repo_name)} &nbsp; | &nbsp; <b>Branch:</b> {html.escape(branch_name)}", small),
         Paragraph(f"<b>Evaluation Window:</b> {html.escape(window_label)} &nbsp; | &nbsp; <b>Generated:</b> {now:%d %b %Y, %H:%M IST}", small),
-        Spacer(1, 5),
+        Spacer(1, 3),
         Paragraph("1. Individual Contribution Breakdown", section_style),
     ]
     total_commits = sum(v["commits"] for v in students.values())
@@ -187,60 +189,64 @@ def generate_report(period="weekly"):
                      f"{v['added'] - v['deleted']:,}", str(len(v["active_days"]))])
     if not students:
         data.append(["No commits found in this reporting period.", "-", "-", "-", "-", "-"])
-    table = Table(data, colWidths=[125, 75, 75, 75, 65, 65], repeatRows=1)
+    table = Table(data, colWidths=[130, 75, 75, 75, 65, 65], repeatRows=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E293B")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("FONTSIZE", (0, 0), (-1, -1), 6.5),
         ("ALIGN", (1, 0), (-1, -1), "CENTER"),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
-        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
     ]))
-    story.extend([table, Spacer(1, 5), Paragraph("2. Visual Trends & Volume", section_style)])
+    story.extend([table, Spacer(1, 3), Paragraph("2. Visual Trends & Volume", section_style)])
     story.append(create_charts(students, timeline))
-    story.extend([Spacer(1, 4), Paragraph(f"3. Detailed Commit Logs & Mentor Evaluation ({period.title()})", section_style)])
+    story.extend([Spacer(1, 2), Paragraph(f"3. Detailed Commit Logs & Mentor Evaluation ({period.title()})", section_style)])
 
     if not logs:
         story.append(Paragraph("No commit logs found for this reporting period.", small))
     else:
         for name, entries in sorted(logs.items()):
-            block = [Paragraph(f"<b>Student:</b> {html.escape(name)} â€” {len(entries)} commit(s)", small)]
+            block = [Paragraph(f"<b>Student:</b> {html.escape(name)} - {len(entries)} commit(s)", small)]
             log_data = [[Paragraph("<b>Date</b>", cell), Paragraph("<b>Hash</b>", cell),
                          Paragraph("<b>Commit Message</b>", cell), Paragraph("<b>Mentor Marks (/10)</b>", cell)]]
             for idx, (day, sha, msg) in enumerate(entries):
                 log_data.append([Paragraph(html.escape(day), cell), Paragraph(html.escape(sha), cell),
                                  Paragraph(html.escape(msg or "(No commit message)"), cell),
                                  Paragraph("<b>_____ / 10</b>" if idx == 0 else "", cell)])
-            lt = Table(log_data, colWidths=[65, 50, 330, 90], repeatRows=1)
+            lt = Table(log_data, colWidths=[65, 48, 332, 90], repeatRows=1)
             lt.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#475569")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("FONTSIZE", (0, 0), (-1, -1), 6.5),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.2),
                 ("SPAN", (3, 1), (3, len(log_data) - 1)) if len(log_data) > 2 else ("BACKGROUND", (3, 1), (3, 1), colors.HexColor("#FEF3C7")),
             ]))
-            block.extend([lt, Spacer(1, 4)])
+            block.extend([lt, Spacer(1, 2)])
             story.append(KeepTogether(block))
 
     story.extend([
-        Spacer(1, 12),
+        Spacer(1, 4),
         Table([[
             [Paragraph("<b>Name:</b> ____________________", small),
              Paragraph("<b>Designation:</b> Project Mentor", small),
-             Spacer(1, 5), Paragraph("<b>Signature:</b> ________________", small)],
+             Spacer(1, 3), Paragraph("<b>Signature:</b> ________________", small)],
             [Paragraph("<b>Name:</b> ____________________", small),
              Paragraph("<b>Designation:</b> Lab Coordinator", small),
-             Spacer(1, 5), Paragraph("<b>Signature:</b> ________________", small)]
+             Spacer(1, 3), Paragraph("<b>Signature:</b> ________________", small)]
         ]], colWidths=[270, 270], style=TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
         ])),
-        Spacer(1, 6),
+        Spacer(1, 3),
         Paragraph("<i>Note: Git metrics summarize recorded repository activity; they do not alone measure contribution quality. Review names, dates, and mentor marks before submission.</i>", small)
     ])
     doc.build(story)
