@@ -44,3 +44,13 @@ Data/*.csv
 # Temporary files
 *.tmp
 *.log
+
+# RainDrop project - raw datasets
+/raindrop2.zip
+/raindrop_volume_processed/
+
+# RainDrop project - reproducible intermediate datasets
+/reports/raindrop2_analysis/next_minute_pairs.csv
+/reports/raindrop2_analysis/splits/
+/reports/raindrop2_analysis/group_split/
+
