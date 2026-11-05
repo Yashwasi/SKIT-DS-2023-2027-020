@@ -1,0 +1,10 @@
+Check,Result
+Total rows scanned,13830190
+Unique row fingerprints,12461324
+Duplicate row patterns,1051905
+Redundant duplicate occurrences across all chunks,1368866
+Redundant occurrences detected within chunks,1368391
+Rows in a chunk matching fingerprints from earlier chunks,587
+Fingerprint patterns appearing in multiple chunks,475
+Chunk size,200000
+Method note,64-bit pandas row fingerprints; no source rows deleted

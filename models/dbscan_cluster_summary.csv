@@ -1,0 +1,4 @@
+DBSCAN_Cluster,Number_of_Raindrops,Mean_Diameter_mm,Mean_Velocity_m_s,Mean_Volume_mm3
+-1,43,3.4864,4.1865,38.4596
+0,14876,0.8216,2.8496,0.3478
+1,81,4.3879,2.6545,44.4154

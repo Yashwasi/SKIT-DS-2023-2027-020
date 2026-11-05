@@ -12,6 +12,9 @@ data/**/*.csv
 
 # Generated reports
 weekly_reports/
+!weekly_reports/
+weekly_reports/*
+!weekly_reports/*.pdf
 
 test_csv.py
 test_csv_rowcount_backup.py
@@ -20,6 +23,11 @@ check_duplicates_backup.py
 # Local DuckDB databases
 *.duckdb
 *.wal
+*.sqlite
+*.sqlite3
+*.db
+*-wal
+*-shm
 # Python
 __pycache__/
 *.py[cod]

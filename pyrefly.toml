@@ -1,0 +1,18 @@
+# pyrefly.toml — Pyrefly type checker configuration
+# https://pyrefly.org/en/stable/configuration/
+
+# Point Pyrefly to the virtual environment so it resolves
+# fastapi, pydantic, xgboost, torch, numpy, pandas, etc.
+python_interpreter = ".venv/bin/python"
+
+# Project source roots
+source_paths = ["."]
+
+# Ignore generated / third-party directories
+[ignore]
+paths = [
+  ".venv",
+  ".git",
+  "__pycache__",
+  "*.egg-info",
+]
