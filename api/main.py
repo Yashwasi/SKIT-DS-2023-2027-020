@@ -86,6 +86,9 @@ XGB_MODEL_PATH = MODEL_DIR / "xgboost_volume_predictor.json"
 NN_MODEL_PATH = MODEL_DIR / "pytorch_raindrop_net.pt"
 
 DATA_CANDIDATES = [
+    PROJECT_ROOT / "data" / "raindrop_volume_deduplicated.csv",
+    PROJECT_ROOT / "data" / "raindrop_volume_working.csv",
+    PROJECT_ROOT / "data" / "raindrop_volume_dataset.csv",
     PROJECT_ROOT
     / "raindrop_volume_processed"
     / "raindrop_volume_clean.csv",
