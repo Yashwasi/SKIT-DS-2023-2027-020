@@ -29,12 +29,13 @@ MAX_K = 8
 # --------------------------------------------------
 print("Loading raindrop dataset...")
 
-if not ZIP_PATH.exists():
+CSV_PATH = ROOT / "data" / "raindrop_volume_deduplicated.csv"
+if not ZIP_PATH.exists() and not CSV_PATH.exists():
     raise FileNotFoundError(f"Dataset not found: {ZIP_PATH}")
 
 df = pd.read_csv(
-    ZIP_PATH,
-    compression="zip",
+    ZIP_PATH if ZIP_PATH.exists() else CSV_PATH,
+    compression="zip" if ZIP_PATH.exists() else None,
     nrows=SAMPLE_ROWS
 )
 

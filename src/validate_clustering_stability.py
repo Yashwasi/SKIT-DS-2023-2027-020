@@ -18,11 +18,21 @@ RANDOM_SEEDS = [42, 123, 2024, 7, 99]
 K_VALUES = [2, 3, 4]
 
 def main():
-    if not ZIP_PATH.exists():
+    csv_fallback = ROOT / "data" / "raindrop_volume_deduplicated.csv"
+    if not ZIP_PATH.exists() and not csv_fallback.exists():
         raise FileNotFoundError(f"Dataset not found: {ZIP_PATH}")
 
-    print("Reading dataset from ZIP...")
-    with zipfile.ZipFile(ZIP_PATH) as archive:
+    if csv_fallback.exists() and not ZIP_PATH.exists():
+        df = pd.read_csv(csv_fallback, usecols=["Diameter_mm", "Velocity_m_s"], nrows=50_000)
+    else:
+        print("Reading dataset from ZIP...")
+        with zipfile.ZipFile(ZIP_PATH) as archive:
+            csv_files = [name for name in archive.namelist() if name.lower().endswith(".csv")]
+            if not csv_files:
+                raise ValueError("No CSV file found inside dataset ZIP.")
+            with archive.open(csv_files[0]) as file:
+                df = pd.read_csv(file, usecols=["Diameter_mm", "Velocity_m_s"])
+    if False:
         csv_files = [
             name for name in archive.namelist()
             if name.lower().endswith(".csv")

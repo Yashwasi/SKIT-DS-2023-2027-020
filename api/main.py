@@ -26,15 +26,19 @@ Interactive docs: http://localhost:8000/docs
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
+
+logger = logging.getLogger("api.main")
 
 # ── Optional data / ML dependencies (lazy so server starts without them) ──
 try:
@@ -136,12 +140,18 @@ class RaindropNet(_NetBase):  # type: ignore[misc,valid-type]
 @lru_cache(maxsize=1)
 def _load_xgb():
     if not _HAS_XGB:
+        logger.warning("XGBoost package is not installed.")
         return None
     if not XGB_MODEL_PATH.exists():
+        logger.warning("XGBoost model file not found at: %s", XGB_MODEL_PATH)
         return None
-    model = xgb.XGBRegressor()
-    model.load_model(str(XGB_MODEL_PATH))
-    return model
+    try:
+        model = xgb.XGBRegressor()
+        model.load_model(str(XGB_MODEL_PATH))
+        return model
+    except Exception as exc:
+        logger.error("Failed to load XGBoost model from %s: %s", XGB_MODEL_PATH, exc)
+        return None
 
 
 @lru_cache(maxsize=1)
@@ -227,8 +237,12 @@ def _predict_xgb(diameter: float, velocity: float) -> Optional[float]:
     model = _load_xgb()
     if model is None:
         return None
-    X = np.array([[diameter, velocity]], dtype=np.float64)
-    return float(model.predict(X)[0])
+    try:
+        X = np.array([[diameter, velocity]], dtype=np.float64)
+        return float(model.predict(X)[0])
+    except Exception as exc:
+        logger.error("XGBoost prediction inference failed: %s", exc)
+        return None
 
 
 def _predict_nn(diameter: float, velocity: float) -> Optional[float]:
@@ -248,6 +262,59 @@ def _predict_nn(diameter: float, velocity: float) -> Optional[float]:
 # ---------------------------------------------------------------------------
 # PYDANTIC SCHEMAS
 # ---------------------------------------------------------------------------
+
+class PredictRequest(BaseModel):
+    """Input payload for POST /predict."""
+
+    diameter_mm: float = Field(
+        ...,
+        gt=0.0,
+        le=15.0,
+        description="Raindrop diameter in millimetres (must be > 0 and <= 15 mm)",
+        json_schema_extra={"example": 1.25},
+    )
+    velocity_m_s: float = Field(
+        ...,
+        gt=0.0,
+        le=25.0,
+        description="Raindrop terminal velocity in metres per second (must be > 0 and <= 25 m/s)",
+        json_schema_extra={"example": 4.10},
+    )
+
+
+class PredictResponse(BaseModel):
+    """Output response for POST /predict."""
+
+    request_id: Optional[int] = Field(
+        default=None,
+        description="Database audit log ID if persisted; None if database is offline or unpersisted",
+    )
+    diameter_mm: float = Field(description="Raindrop diameter in millimetres")
+    velocity_m_s: float = Field(description="Raindrop velocity in metres per second")
+    inputs: dict[str, float] = Field(
+        description="Input feature values dictionary",
+    )
+    formula_volume_mm3: float = Field(
+        description="Theoretical volume calculated using the spherical formula V = (π/6) × d³",
+    )
+    predicted_volume_mm3: Optional[float] = Field(
+        default=None,
+        description="Volume predicted by the trained XGBoost model",
+    )
+    xgb_volume_mm3: Optional[float] = Field(
+        default=None,
+        description="Alias for predicted_volume_mm3",
+    )
+    latency_ms: float = Field(
+        description="Total inference and processing latency in milliseconds",
+    )
+    status: str = Field(
+        description="Prediction status ('success' or 'model_unavailable')",
+    )
+    database_audit: str = Field(
+        description="Audit persistence status ('persisted' or 'skipped (database unavailable)')",
+    )
+
 
 class RaindropSample(BaseModel):
     diameter_mm: float = Field(
@@ -371,6 +438,42 @@ async def health():
     return {"status": "ok", "timestamp": time.time()}
 
 
+@app.get("/health/database", tags=["Database"])
+async def database_health():
+    """
+    Check connectivity, query latency, and TimescaleDB extension status.
+    Returns HTTP 200 when connected and operational, or HTTP 503 if unreachable.
+    """
+    try:
+        from database.connection import check_database_health
+        health_status = check_database_health()
+        if health_status.get("is_connected"):
+            return health_status
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=health_status,
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "error",
+                "is_connected": False,
+                "error": f"Failed to execute health check: {type(exc).__name__}: {exc}",
+            },
+        )
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    """Dispose connection pools and cleanup resources on shutdown."""
+    try:
+        from database.connection import close_database_pool
+        close_database_pool()
+    except Exception:
+        pass
+
+
 @app.get("/models/info", tags=["Models"])
 async def models_info():
     """Return metadata about loaded models."""
@@ -395,6 +498,68 @@ async def models_info():
         "features": FEATURE_COLUMNS,
         "target": "Volume_mm3",
     }
+
+
+@app.post(
+    "/predict",
+    response_model=PredictResponse,
+    tags=["Prediction"],
+    summary="Predict raindrop volume from diameter and velocity",
+)
+async def predict(request: Request, sample: PredictRequest):
+    """
+    Predict raindrop Volume_mm3 from Diameter_mm and Velocity_m_s.
+
+    Calculates:
+    1. Theoretical spherical volume: V = (π/6) × d³
+    2. XGBoost ML predicted volume from trained model weights
+    3. Total inference latency in milliseconds
+    4. Safe audit log persistence to PostgreSQL/TimescaleDB (optional persistence mode)
+
+    Validation rules:
+    - diameter_mm: strictly positive, <= 15.0 mm
+    - velocity_m_s: strictly positive, <= 25.0 m/s
+    """
+    t_start = time.perf_counter()
+
+    formula_vol = _spherical_volume(sample.diameter_mm)
+    xgb_vol = _predict_xgb(sample.diameter_mm, sample.velocity_m_s)
+    latency_ms = round((time.perf_counter() - t_start) * 1000.0, 3)
+
+    status_str = "success" if xgb_vol is not None else "model_unavailable"
+
+    client_ip = request.client.host if request.client else None
+    request_id = None
+    audit_status = "skipped (database unavailable)"
+
+    try:
+        from database.connection import log_prediction_audit
+        request_id, audit_status = log_prediction_audit(
+            input_diameter=sample.diameter_mm,
+            input_velocity=sample.velocity_m_s,
+            formula_vol=round(formula_vol, 8),
+            xgb_vol=round(xgb_vol, 8) if xgb_vol is not None else None,
+            latency_ms=latency_ms,
+            client_ip=client_ip,
+        )
+    except Exception as exc:
+        logger.debug("Database audit logging error: %s", exc)
+
+    return PredictResponse(
+        request_id=request_id,
+        diameter_mm=sample.diameter_mm,
+        velocity_m_s=sample.velocity_m_s,
+        inputs={
+            "diameter_mm": sample.diameter_mm,
+            "velocity_m_s": sample.velocity_m_s,
+        },
+        formula_volume_mm3=round(formula_vol, 8),
+        predicted_volume_mm3=round(xgb_vol, 8) if xgb_vol is not None else None,
+        xgb_volume_mm3=round(xgb_vol, 8) if xgb_vol is not None else None,
+        latency_ms=latency_ms,
+        status=status_str,
+        database_audit=audit_status,
+    )
 
 
 @app.post(

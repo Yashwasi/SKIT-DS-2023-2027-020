@@ -25,8 +25,8 @@ RANDOM_STATE = 42
 print("Loading dataset...")
 
 df = pd.read_csv(
-    ZIP_PATH,
-    compression="zip",
+    ZIP_PATH if ZIP_PATH.exists() else (ROOT / "data" / "raindrop_volume_deduplicated.csv"),
+    compression="zip" if ZIP_PATH.exists() else None,
     nrows=100_000
 )
 
