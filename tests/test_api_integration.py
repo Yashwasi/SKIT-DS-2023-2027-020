@@ -213,7 +213,63 @@ class TestFastAPIIntegration(unittest.TestCase):
         mock_audit.assert_called_once()
 
     # -------------------------------------------------------------------------
-    # 6. OpenAPI Documentation
+    # 6. Additional Endpoints (/predict/volume, /predict/batch, /validate, /)
+    # -------------------------------------------------------------------------
+
+    def test_root_endpoint_metadata(self):
+        """GET / returns project metadata, team info, and running status."""
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("status"), "running")
+        self.assertIn("project", data)
+        self.assertIn("team", data)
+
+    def test_predict_volume_endpoint(self):
+        """POST /predict/volume returns formula volume and model comparison."""
+        payload = {"diameter_mm": 1.0, "velocity_m_s": 3.0}
+        response = self.client.post("/predict/volume", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["diameter_mm"], 1.0)
+        self.assertAlmostEqual(data["volume_formula_mm3"], _spherical_volume(1.0), places=6)
+        self.assertIn("formula", data["models_available"])
+
+    def test_predict_batch_endpoint(self):
+        """POST /predict/batch handles multiple valid raindrop samples."""
+        payload = {
+            "samples": [
+                {"diameter_mm": 0.8, "velocity_m_s": 2.5},
+                {"diameter_mm": 1.5, "velocity_m_s": 4.5},
+            ]
+        }
+        response = self.client.post("/predict/batch", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(len(data["predictions"]), 2)
+
+    def test_validate_data_row_endpoint(self):
+        """POST /validate checks physical boundaries and detects non-positive values."""
+        # Valid row
+        r_valid = self.client.post(
+            "/validate",
+            json={"diameter_mm": 1.0, "velocity_m_s": 3.0, "volume_mm3": 0.523599},
+        )
+        self.assertEqual(r_valid.status_code, 200)
+        self.assertTrue(r_valid.json()["is_valid"])
+
+        # Invalid row (negative diameter)
+        r_invalid = self.client.post(
+            "/validate",
+            json={"diameter_mm": -1.0, "velocity_m_s": 3.0, "volume_mm3": 0.5},
+        )
+        self.assertEqual(r_invalid.status_code, 200)
+        self.assertFalse(r_invalid.json()["is_valid"])
+        self.assertGreater(len(r_invalid.json()["issues"]), 0)
+
+    # -------------------------------------------------------------------------
+    # 7. OpenAPI Documentation
     # -------------------------------------------------------------------------
 
     def test_openapi_schema_generation(self):

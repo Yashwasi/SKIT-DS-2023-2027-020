@@ -54,7 +54,7 @@ if _HAS_SQLALCHEMY:
 
         # Relationships
         observations = relationship("RaindropObservation", back_populates="station", cascade="all, delete-orphan")
-        intensity_records = relationship("RainfallIntensityRecord", back_populates="station")
+        intensity_records = relationship("RainfallIntensityRecord", back_populates="station", cascade="all, delete-orphan")
 
         def __repr__(self) -> str:
             return f"<Station(id={self.station_id!r}, name={self.station_name!r}, canopy={self.canopy_type!r})>"
@@ -101,7 +101,7 @@ if _HAS_SQLALCHEMY:
         )
 
         period_start = Column(DateTime, primary_key=True)
-        station_id = Column(String(64), ForeignKey("stations.station_id"), primary_key=True)
+        station_id = Column(String(64), ForeignKey("stations.station_id", ondelete="CASCADE"), primary_key=True)
         period_end = Column(DateTime, nullable=False)
         rain_rate_mm_h = Column(Float, nullable=False)
         total_drops = Column(Integer, nullable=False)
@@ -125,7 +125,11 @@ if _HAS_SQLALCHEMY:
             Index("idx_audit_time", "requested_at"),
         )
 
-        request_id = Column(BigInteger, primary_key=True, autoincrement=True)
+        request_id = Column(
+            BigInteger().with_variant(Integer, "sqlite"),
+            primary_key=True,
+            autoincrement=True,
+        )
         requested_at = Column(DateTime(timezone=True), server_default=func.now())
         input_diameter_mm = Column(Float, nullable=False)
         input_velocity_m_s = Column(Float, nullable=False)

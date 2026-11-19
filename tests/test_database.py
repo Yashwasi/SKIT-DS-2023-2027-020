@@ -182,6 +182,104 @@ class TestDatabaseModels(unittest.TestCase):
         self.assertEqual(log.xgb_volume_mm3, 0.905100)
 
 
+class TestOfflineDatabaseOperations(unittest.TestCase):
+    """
+    Verifies ORM models, foreign keys, relationships, autoincrement, and
+    cascade deletion in an isolated in-memory engine without requiring PostgreSQL.
+    """
+
+    def setUp(self):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from database.models import Base
+
+        self.engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(self.engine)
+        self.Session = sessionmaker(bind=self.engine)
+        self.session = self.Session()
+
+    def tearDown(self):
+        self.session.close()
+        self.engine.dispose()
+
+    def test_offline_crud_and_relationship_lifecycle(self):
+        """Test full insert, retrieve, relationship traversal, and cascade delete."""
+        import datetime
+
+        # 1. Insert Station
+        station = Station(
+            station_id="ST_OAK_01",
+            station_name="Oak Canopy Test Station",
+            canopy_type="Defoliated Oak",
+            latitude=35.69,
+            longitude=139.69,
+        )
+        self.session.add(station)
+        self.session.commit()
+
+        # 2. Insert Raindrop Observation
+        obs = RaindropObservation(
+            observed_at=datetime.datetime(2026, 11, 19, 10, 0, 0),
+            station_id="ST_OAK_01",
+            diameter_mm=1.40,
+            velocity_m_s=4.50,
+            volume_mm3=1.4368,
+            condition="Defoliated_Oak_Rain",
+            source_file="test_raindrop.csv",
+        )
+        self.session.add(obs)
+
+        # 3. Insert Rainfall Intensity Record
+        intensity = RainfallIntensityRecord(
+            period_start=datetime.datetime(2026, 11, 19, 10, 0, 0),
+            period_end=datetime.datetime(2026, 11, 19, 10, 1, 0),
+            station_id="ST_OAK_01",
+            rain_rate_mm_h=8.2,
+            total_drops=250,
+            mean_diameter_mm=1.2,
+            mean_velocity_m_s=4.1,
+            total_volume_mm3=180.5,
+            condition="Defoliated_Oak_Rain",
+        )
+        self.session.add(intensity)
+        self.session.commit()
+
+        # 4. Traversal
+        retrieved_st = self.session.query(Station).filter_by(station_id="ST_OAK_01").one()
+        self.assertEqual(len(retrieved_st.observations), 1)
+        self.assertEqual(len(retrieved_st.intensity_records), 1)
+        self.assertEqual(retrieved_st.observations[0].diameter_mm, 1.40)
+
+        # 5. Cascade Delete
+        self.session.delete(retrieved_st)
+        self.session.commit()
+        self.assertEqual(self.session.query(RaindropObservation).count(), 0)
+        self.assertEqual(self.session.query(RainfallIntensityRecord).count(), 0)
+
+    def test_prediction_audit_autoincrement(self):
+        """Verify autoincrement primary key generation for prediction audit logs."""
+        log1 = PredictionAuditLog(
+            input_diameter_mm=1.1,
+            input_velocity_m_s=3.2,
+            formula_volume_mm3=0.6969,
+            xgb_volume_mm3=0.6975,
+            latency_ms=1.2,
+        )
+        log2 = PredictionAuditLog(
+            input_diameter_mm=2.0,
+            input_velocity_m_s=5.5,
+            formula_volume_mm3=4.1888,
+            xgb_volume_mm3=4.1890,
+            latency_ms=1.5,
+        )
+        self.session.add_all([log1, log2])
+        self.session.commit()
+
+        self.assertIsNotNone(log1.request_id)
+        self.assertIsNotNone(log2.request_id)
+        self.assertEqual(log2.request_id, log1.request_id + 1)
+
+
 class TestLiveDatabaseIntegration(unittest.TestCase):
     """
     Integration tests requiring a live PostgreSQL / TimescaleDB instance.
