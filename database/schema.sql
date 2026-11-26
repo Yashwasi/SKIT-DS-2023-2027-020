@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS stations (
 -- 2. Individual Raindrop Observations (High-Volume Time-Series Table)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS raindrop_observations (
+    observation_id      BIGSERIAL,
     observed_at         TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     station_id          VARCHAR(64) NOT NULL,
     diameter_mm         DOUBLE PRECISION NOT NULL CHECK (diameter_mm > 0.0 AND diameter_mm <= 15.0),
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS raindrop_observations (
     condition           VARCHAR(64) NOT NULL,
     source_file         VARCHAR(128) NOT NULL,
 
+    CONSTRAINT pk_raindrop_obs PRIMARY KEY (observed_at, observation_id),
     CONSTRAINT fk_station FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE CASCADE
 );
 
@@ -93,7 +95,7 @@ CREATE TABLE IF NOT EXISTS rainfall_intensity_records (
     condition           VARCHAR(64),
 
     CONSTRAINT pk_rainfall_intensity PRIMARY KEY (period_start, station_id),
-    CONSTRAINT fk_intensity_station FOREIGN KEY (station_id) REFERENCES stations(station_id)
+    CONSTRAINT fk_intensity_station FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE CASCADE
 );
 
 -- ----------------------------------------------------------------------------

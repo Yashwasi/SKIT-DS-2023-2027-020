@@ -74,10 +74,16 @@ if _HAS_SQLALCHEMY:
             Index("idx_raindrop_diameter_velocity", "diameter_mm", "velocity_m_s"),
         )
 
-        # In Timescale hypertables, observed_at is part of partition key
-        observed_at = Column(DateTime, nullable=False, primary_key=True)
-        station_id = Column(String(64), ForeignKey("stations.station_id", ondelete="CASCADE"), primary_key=True)
-        diameter_mm = Column(Float, primary_key=True)  # Composite key for ORM mapping
+        # Primary key observation_id guarantees unique identification per drop.
+        # In Timescale hypertables, observed_at is part of partition key.
+        observation_id = Column(
+            BigInteger().with_variant(Integer, "sqlite"),
+            primary_key=True,
+            autoincrement=True,
+        )
+        observed_at = Column(DateTime, nullable=False, index=True)
+        station_id = Column(String(64), ForeignKey("stations.station_id", ondelete="CASCADE"), nullable=False)
+        diameter_mm = Column(Float, nullable=False)
         velocity_m_s = Column(Float, nullable=False)
         volume_mm3 = Column(Float, nullable=False)
         condition = Column(String(64), nullable=False)
@@ -166,6 +172,7 @@ else:
         volume_mm3: float
         condition: str
         source_file: str
+        observation_id: Optional[int] = None
 
     @dataclass
     class RainfallIntensityRecord:  # type: ignore[no-redef]

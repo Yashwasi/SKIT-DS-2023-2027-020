@@ -20,24 +20,25 @@ As of **19 November 2026**, the core technical components corresponding to the o
 | **Task 1: Collect Historical Weather Datasets** | 22/08/2026 – 05/09/2026 | **Completed (100%)** | 17 disdrometer source files inspected; master dataset verified: 13,830,190 rows. |
 | **Task 2: Prepare Model-Ready Dataset** | 06/09/2026 – 03/10/2026 | **Completed (100%)** | `deduplicate_dataset.py` with DuckDB out-of-core streaming; 1,368,391 duplicates removed; 12,461,324 rows; 0 missing values; 0 invalid entries. |
 | **Task 3: Evaluate Model Performance** | 04/10/2026 – 31/10/2026 | **Completed (100%)** | K-Means ($k=3$, Silhouette=0.532), DBSCAN ($\epsilon=0.5$, Silhouette=0.702), stability validation (ARI=1.0), supervised XGBoost ($R^2=0.836$, $\text{MAE}=0.160$). |
-| **Task 4: Design Database** | 01/11/2026 – 30/11/2026 | **Verified (90%)** | DDL schema (`schema.sql`), SQLAlchemy ORM models, TimescaleDB 7-day hypertable chunking, offline CRUD/cascade deletion verified; Live deployment pending PostgreSQL host. |
-| **Task 5: Integrate Database with Backend** | 01/12/2026 – 02/01/2027 | **In Progress (60%)** | FastAPI `/health/database`, `/predict` audit logging with offline fallback, 36 automated unit tests passing (`OK, skipped=1`). |
+| **Task 4: Design Database** | 01/11/2026 – 30/11/2026 | **Completed (100%)** | DDL schema (`schema.sql`) deployed on live PostgreSQL 19 (`raindrop_db`); 3 baseline stations seeded; live CRUD, check constraints, autoincrement PKs, cascade deletion, and analytical views verified. |
+| **Task 5: Integrate Database with Backend** | 01/12/2026 – 02/01/2027 | **In Progress (90%)** | FastAPI `/health/database` (200 OK, latency < 1 ms), `/predict` real-time PostgreSQL audit logging (`request_id` persisted), offline fallback handling, 40 automated unit/integration tests passing (`OK`). |
 | **Task 6: Develop Angular Dashboard** | 03/01/2027 – 31/01/2027 | **Not Started / Not Yet Due** | Timeline begins January 2027. |
 | **Task 7: Enhance Angular Dashboard** | 01/02/2027 – 06/03/2027 | **Not Started / Not Yet Due** | Timeline begins February 2027. |
 
 ---
 
-## 2. Database Design & Offline Verification (Task 4)
+## 2. Database Design & Live PostgreSQL 19 Verification (Task 4)
 
 ### A. Schema Architecture (`database/schema.sql`)
 1. **Core Relational Tables:**
    - `stations`: Primary key `station_id` (VARCHAR 64), canopy classification, geographic coordinates.
-   - `raindrop_observations`: Partitioned time-series records (`observed_at`, `station_id`, `diameter_mm` composite PK).
+   - `raindrop_observations`: Partitioned time-series records with `observation_id BIGSERIAL` and composite primary key `(observed_at, observation_id)`.
    - `rainfall_intensity_records`: Aggregated 1-minute intervals (`period_start`, `station_id` composite PK).
    - `prediction_audit_logs`: Autoincrementing inference history (`request_id` BIGSERIAL PK, `requested_at`, `latency_ms`).
-2. **TimescaleDB Hypertable:**
-   - Partitioned by `observed_at` with `chunk_time_interval => INTERVAL '7 days'`.
-   - Conditional DDL via PL/pgSQL `DO $$` block ensures non-destructive execution even if TimescaleDB extension is absent.
+2. **TimescaleDB Extension Status on PostgreSQL 19:**
+   - Evaluated `pg_available_extensions` on the live Windows host: TimescaleDB is currently not available for PostgreSQL 19 on Windows (official support reaches up to PG 17).
+   - The conditional PL/pgSQL `DO $$` block handled this smoothly without raising errors.
+   - Standard PostgreSQL 19 relational architecture, indexes, and constraints are fully operational with sub-millisecond query latency.
 3. **Physical Domain Constraints:**
    - `diameter_mm > 0.0 AND diameter_mm <= 15.0`
    - `velocity_m_s > 0.0 AND velocity_m_s <= 25.0`
@@ -58,9 +59,18 @@ As of **19 November 2026**, the core technical components corresponding to the o
   - Relational traversal (`station.observations`): Passed
   - Cascade deletion (deleting station purges observations and intensity records): Passed
 
-### C. Live PostgreSQL Probe
-- Probing `localhost:5432` confirms PostgreSQL is currently **offline**.
-- Backend gracefully transitions into **optional persistence mode** without crashes or unhandled exceptions.
+### C. Live PostgreSQL 19 Verification (`raindrop_db`)
+- Live connection to `localhost:5432` confirmed with `postgresql-x64-19` Windows service.
+- All 11 schema blocks applied successfully via `database/init_db.py`.
+- Seeded 3 baseline monitoring stations (`RD1_Foliated_Cedar`, `RD2_Defoliated_Oak`, `RD3_Open_Field`).
+- Live transaction verification in `scripts/verify_database_setup.py`:
+  - Station insertion: SUCCESS
+  - Raindrop observation insertion (`observation_id=1`): SUCCESS
+  - Raindrop observation update: SUCCESS
+  - Check constraint enforcement (invalid diameter $\le 0$ strictly rejected by PostgreSQL): SUCCESS
+  - Prediction audit log insertion (`request_id=1`): SUCCESS
+  - Cascade deletion (deleting test station automatically removed observations): SUCCESS
+  - Test fixtures cleanly removed without altering existing project data.
 
 ---
 
@@ -119,11 +129,11 @@ python -m unittest discover tests
 ```
 
 **Results:**
-- Ran: **36 tests**
-- Passed: **35 tests**
-- Skipped: **1 test** (`test_live_database_connection_and_version` — safely skipped due to offline PostgreSQL)
+- Ran: **40 tests**
+- Passed: **40 tests** (100% pass rate)
 - Failures: **0**
 - Errors: **0**
+- Coverage includes: database config & credential safety, schema syntax, offline SQLite transaction lifecycle, live PostgreSQL 19 connection & CRUD, cascade deletion, FastAPI liveness & readiness probes, model inference, and real-time database audit log persistence.
 
 ---
 
@@ -132,10 +142,10 @@ python -m unittest discover tests
 Run these commands from the repository root (`C:\Users\shubh\SKIT-DS-2023-2027-020`):
 
 ```powershell
-# 1. Run complete automated test suite (36 tests)
+# 1. Run complete automated test suite (40 tests)
 python -m unittest discover tests
 
-# 2. Run Database Architecture & Offline CRUD Verification
+# 2. Run Database Architecture, Live PostgreSQL 19 CRUD & Constraint Verification
 python scripts/verify_database_setup.py
 
 # 3. Run Scientific ML Validity & Formula Benchmark
@@ -149,14 +159,11 @@ python -m database.init_db --dry-run
 
 ## 6. Blockers, Risks & Next Action Plan
 
-1. **Current Blocker for Live Database:**
-   - PostgreSQL 16 is not yet running on `localhost:5432`.
-   - `psycopg2-binary` package is not yet installed in `.venv`.
-   - **Resolution:** When Docker or native PostgreSQL is started, run:
-     ```bash
-     pip install psycopg2-binary
-     python -m database.init_db --seed-stations
-     ```
-2. **Upcoming Milestone:**
-   - Task 5 full database-backend live link in December 2026.
+1. **Database Status (Resolved):**
+   - PostgreSQL 19 is running (`postgresql-x64-19` Windows service).
+   - `psycopg2-binary` (2.9.13) and `python-dotenv` are installed in `.venv`.
+   - `raindrop_db` schema is fully deployed with all 4 tables, 2 views, and 3 seeded stations.
+   - TimescaleDB limitation documented: TimescaleDB extension does not support PostgreSQL 19 on Windows yet; PostgreSQL relational tables perform with high throughput and < 1 ms query latency.
+2. **Upcoming Milestones:**
+   - Task 5 completion and stabilization in December 2026.
    - Task 6 Angular frontend development in January 2027.

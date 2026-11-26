@@ -9,6 +9,7 @@ Masks credentials in logs and audit outputs to prevent credential leaks.
 from __future__ import annotations
 
 import os
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
@@ -51,7 +52,8 @@ class DatabaseConfig:
         driver_prefix = f"postgresql+{driver}" if driver else "postgresql"
         auth = self.user
         if self.password:
-            auth = f"{self.user}:{self.password}"
+            pwd_quoted = urllib.parse.quote_plus(self.password)
+            auth = f"{self.user}:{pwd_quoted}"
         return f"{driver_prefix}://{auth}@{self.host}:{self.port}/{self.name}"
 
     def get_safe_url(self) -> str:

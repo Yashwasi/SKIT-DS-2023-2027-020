@@ -294,6 +294,227 @@ class TestLiveDatabaseIntegration(unittest.TestCase):
         self.assertIsNotNone(health["latency_ms"])
         self.assertGreater(health["latency_ms"], 0.0)
 
+    @unittest.skipIf(not is_live_db_available(), "PostgreSQL/TimescaleDB live server is not accessible on localhost:5432.")
+    def test_live_stations_seeded(self):
+        """Verify baseline monitoring stations exist in live raindrop_db."""
+        from database.connection import get_engine
+        from sqlalchemy import text
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT station_id FROM stations ORDER BY station_id")).fetchall()
+            station_ids = [r[0] for r in result]
+            self.assertIn("RD1_Foliated_Cedar", station_ids)
+            self.assertIn("RD2_Defoliated_Oak", station_ids)
+            self.assertIn("RD3_Open_Field", station_ids)
+
+    @unittest.skipIf(not is_live_db_available(), "PostgreSQL/TimescaleDB live server is not accessible on localhost:5432.")
+    def test_live_crud_and_cascade_lifecycle(self):
+        """Perform real CRUD lifecycle and verify cascade delete in live PostgreSQL."""
+        import datetime
+        from database.connection import get_session_factory
+        factory = get_session_factory()
+        self.assertIsNotNone(factory)
+
+        test_st_id = "TEMP_TEST_PG19_VERIFY"
+        with factory() as session:
+            try:
+                # Cleanup any residue
+                existing = session.query(Station).filter_by(station_id=test_st_id).first()
+                if existing:
+                    session.delete(existing)
+                    session.commit()
+
+                # 1. Create Station
+                st = Station(
+                    station_id=test_st_id,
+                    station_name="Temporary Verification Station",
+                    canopy_type="Live Test Canopy",
+                    instrument_type="Optical Disdrometer",
+                    latitude=35.123,
+                    longitude=139.456,
+                    elevation_m=100.0,
+                )
+                session.add(st)
+                session.commit()
+
+                # 2. Insert Observation
+                now = datetime.datetime.now()
+                obs = RaindropObservation(
+                    observed_at=now,
+                    station_id=test_st_id,
+                    diameter_mm=2.50,
+                    velocity_m_s=6.20,
+                    volume_mm3=8.1812,
+                    condition="Live_Test_Rain",
+                    source_file="live_verification.csv",
+                )
+                session.add(obs)
+                session.commit()
+
+                # 3. Read & Verify
+                queried_obs = session.query(RaindropObservation).filter_by(station_id=test_st_id).first()
+                self.assertIsNotNone(queried_obs)
+                self.assertEqual(queried_obs.diameter_mm, 2.50)
+                self.assertIsNotNone(queried_obs.observation_id)
+
+                # 4. Update
+                queried_obs.velocity_m_s = 6.25
+                session.commit()
+                queried_obs = session.query(RaindropObservation).filter_by(station_id=test_st_id).first()
+                self.assertEqual(queried_obs.velocity_m_s, 6.25)
+
+                # 5. Cascade Delete
+                session.delete(st)
+                session.commit()
+
+                remaining_obs = session.query(RaindropObservation).filter_by(station_id=test_st_id).count()
+                self.assertEqual(remaining_obs, 0, "Cascade deletion did not remove observations!")
+
+            finally:
+                rem = session.query(Station).filter_by(station_id=test_st_id).first()
+                if rem:
+                    session.delete(rem)
+                    session.commit()
+
+    @unittest.skipIf(not is_live_db_available(), "PostgreSQL/TimescaleDB live server is not accessible on localhost:5432.")
+    def test_live_timescaledb_detection(self):
+        """
+        Confirm that check_live_timescaledb_status accurately reports
+        TimescaleDB as NOT_INSTALLED on the live PostgreSQL 19 Windows instance,
+        and raindrop_observations as a regular relational table.
+        """
+        from database.connection import get_engine
+        from scripts.verify_database_setup import check_live_timescaledb_status
+
+        engine = get_engine()
+        with engine.connect() as conn:
+            ts_status = check_live_timescaledb_status(conn)
+            self.assertFalse(ts_status["installed"])
+            self.assertEqual(ts_status["status"], "NOT_INSTALLED")
+            self.assertFalse(ts_status["is_hypertable"])
+            self.assertIsNone(ts_status["chunk_interval"])
+
+
+class TestTimescaleDBVerification(unittest.TestCase):
+    """
+    Unit tests for live TimescaleDB hypertable and chunk interval status detection.
+    Covers both available and unavailable scenarios using mocked database connections.
+    """
+
+    def test_timescaledb_not_installed_scenario(self):
+        """
+        When TimescaleDB is not installed in PostgreSQL, check_live_timescaledb_status
+        must report status 'NOT_INSTALLED', is_hypertable=False, and not fail.
+        """
+        from scripts.verify_database_setup import check_live_timescaledb_status
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchone.return_value = None
+
+        res = check_live_timescaledb_status(mock_conn)
+        self.assertFalse(res["installed"])
+        self.assertIsNone(res["version"])
+        self.assertFalse(res["is_hypertable"])
+        self.assertIsNone(res["chunk_interval"])
+        self.assertFalse(res["chunk_interval_matches"])
+        self.assertEqual(res["status"], "NOT_INSTALLED")
+        self.assertIn("standard PostgreSQL", res["message"])
+
+    def test_timescaledb_installed_and_hypertable_verified_scenario(self):
+        """
+        When TimescaleDB is installed and raindrop_observations is a hypertable
+        with a 7-day chunk interval, check_live_timescaledb_status must report 'VERIFIED'.
+        """
+        from scripts.verify_database_setup import check_live_timescaledb_status
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+
+        def mock_execute(query):
+            query_str = str(query)
+            mock_res = MagicMock()
+            if "pg_extension" in query_str:
+                mock_res.fetchone.return_value = ("2.14.2",)
+            elif "timescaledb_information.hypertables" in query_str:
+                mock_res.fetchone.return_value = ("raindrop_observations",)
+            elif "timescaledb_information.dimensions" in query_str:
+                mock_res.fetchone.return_value = ("7 days",)
+            else:
+                mock_res.fetchone.return_value = None
+            return mock_res
+
+        mock_conn.execute.side_effect = mock_execute
+
+        res = check_live_timescaledb_status(mock_conn)
+        self.assertTrue(res["installed"])
+        self.assertEqual(res["version"], "2.14.2")
+        self.assertTrue(res["is_hypertable"])
+        self.assertEqual(res["chunk_interval"], "7 days")
+        self.assertTrue(res["chunk_interval_matches"])
+        self.assertEqual(res["status"], "VERIFIED")
+        self.assertIn("7-day chunk interval", res["message"])
+
+    def test_timescaledb_installed_but_table_is_regular_relational(self):
+        """
+        When TimescaleDB is installed but raindrop_observations was not converted
+        into a hypertable, report 'NOT_HYPERTABLE'.
+        """
+        from scripts.verify_database_setup import check_live_timescaledb_status
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+
+        def mock_execute(query):
+            query_str = str(query)
+            mock_res = MagicMock()
+            if "pg_extension" in query_str:
+                mock_res.fetchone.return_value = ("2.14.2",)
+            elif "hypertables" in query_str or "_timescaledb_catalog" in query_str:
+                mock_res.fetchone.return_value = None
+            else:
+                mock_res.fetchone.return_value = None
+            return mock_res
+
+        mock_conn.execute.side_effect = mock_execute
+
+        res = check_live_timescaledb_status(mock_conn)
+        self.assertTrue(res["installed"])
+        self.assertFalse(res["is_hypertable"])
+        self.assertEqual(res["status"], "NOT_HYPERTABLE")
+        self.assertIn("not configured as a hypertable", res["message"])
+
+    def test_timescaledb_installed_hypertable_chunk_interval_mismatch(self):
+        """
+        When hypertable chunk interval differs from 7 days, report 'INTERVAL_MISMATCH'.
+        """
+        from scripts.verify_database_setup import check_live_timescaledb_status
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+
+        def mock_execute(query):
+            query_str = str(query)
+            mock_res = MagicMock()
+            if "pg_extension" in query_str:
+                mock_res.fetchone.return_value = ("2.14.2",)
+            elif "timescaledb_information.hypertables" in query_str:
+                mock_res.fetchone.return_value = ("raindrop_observations",)
+            elif "timescaledb_information.dimensions" in query_str:
+                mock_res.fetchone.return_value = ("1 day",)
+            else:
+                mock_res.fetchone.return_value = None
+            return mock_res
+
+        mock_conn.execute.side_effect = mock_execute
+
+        res = check_live_timescaledb_status(mock_conn)
+        self.assertTrue(res["installed"])
+        self.assertTrue(res["is_hypertable"])
+        self.assertFalse(res["chunk_interval_matches"])
+        self.assertEqual(res["status"], "INTERVAL_MISMATCH")
+        self.assertEqual(res["chunk_interval"], "1 day")
+
 
 if __name__ == "__main__":
     unittest.main()

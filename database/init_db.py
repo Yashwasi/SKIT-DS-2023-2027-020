@@ -167,7 +167,12 @@ def initialize_database(seed_stations: bool = False) -> bool:
         with engine.begin() as conn:
             for idx, stmt in enumerate(statements, start=1):
                 clean_stmt = stmt.strip()
-                if not clean_stmt or clean_stmt.startswith("--"):
+                # Check if statement has any executable SQL (not purely comments or empty)
+                non_comment_lines = [
+                    l for l in clean_stmt.splitlines()
+                    if l.strip() and not l.strip().startswith("--")
+                ]
+                if not non_comment_lines:
                     continue
                 conn.execute(text(clean_stmt))
                 print(f"  [{idx:02d}/{len(statements):02d}] Applied successfully.")

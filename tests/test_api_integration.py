@@ -40,11 +40,18 @@ class TestFastAPIIntegration(unittest.TestCase):
         self.assertEqual(data.get("status"), "ok")
         self.assertIn("timestamp", data)
 
-    def test_database_health_endpoint_offline(self):
+    @patch("database.connection.check_database_health")
+    def test_database_health_endpoint_offline(self, mock_health):
         """
         GET /health/database returns HTTP 503 when PostgreSQL is offline,
         providing structured diagnostic details without leaking credentials.
         """
+        mock_health.return_value = {
+            "status": "unhealthy",
+            "is_connected": False,
+            "safe_url": "postgresql://postgres:***@localhost:5432/raindrop_db",
+            "error": "Connection refused",
+        }
         response = self.client.get("/health/database")
         self.assertEqual(response.status_code, 503)
         data = response.json()
@@ -53,6 +60,28 @@ class TestFastAPIIntegration(unittest.TestCase):
         self.assertIn("safe_url", data)
         self.assertNotIn("password", str(data.get("safe_url")).lower())
         self.assertIn("error", data)
+
+    @patch("database.connection.check_database_health")
+    def test_database_health_endpoint_online(self, mock_health):
+        """
+        GET /health/database returns HTTP 200 when PostgreSQL is healthy and connected.
+        """
+        mock_health.return_value = {
+            "status": "healthy",
+            "is_connected": True,
+            "latency_ms": 1.25,
+            "timescaledb_extension": False,
+            "timescaledb_version": None,
+            "port_listening": True,
+            "safe_url": "postgresql://postgres:***@localhost:5432/raindrop_db",
+            "error": None,
+        }
+        response = self.client.get("/health/database")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("status"), "healthy")
+        self.assertTrue(data.get("is_connected"))
+        self.assertIn("latency_ms", data)
 
     # -------------------------------------------------------------------------
     # 2. Valid Prediction Request & Response Structure
@@ -183,7 +212,8 @@ class TestFastAPIIntegration(unittest.TestCase):
     # 5. Database Integration & Audit Logging
     # -------------------------------------------------------------------------
 
-    def test_database_unavailable_optional_persistence(self):
+    @patch("database.connection.log_prediction_audit", return_value=(None, "skipped (database unavailable)"))
+    def test_database_unavailable_optional_persistence(self, mock_audit):
         """
         When PostgreSQL is offline, predictions continue seamlessly in
         optional-persistence mode. request_id must be None and database_audit
@@ -196,6 +226,26 @@ class TestFastAPIIntegration(unittest.TestCase):
         data = response.json()
         self.assertIsNone(data["request_id"])
         self.assertIn("skipped", data["database_audit"].lower())
+        mock_audit.assert_called_once()
+
+    def test_database_live_persistence(self):
+        """
+        When live PostgreSQL is reachable, POST /predict persists an audit log
+        and returns a valid integer request_id with database_audit 'persisted'.
+        """
+        from database.connection import probe_tcp_port
+        from database.config import db_config
+        is_up, _ = probe_tcp_port(db_config.host, db_config.port, timeout_sec=0.2)
+        if not is_up:
+            self.skipTest("Live database not reachable")
+
+        payload = {"diameter_mm": 1.10, "velocity_m_s": 3.20}
+        response = self.client.post("/predict", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNotNone(data["request_id"])
+        self.assertIsInstance(data["request_id"], int)
+        self.assertEqual(data["database_audit"], "persisted")
 
     @patch("database.connection.log_prediction_audit", return_value=(4242, "persisted"))
     def test_database_audit_logging_mocked_success(self, mock_audit):
